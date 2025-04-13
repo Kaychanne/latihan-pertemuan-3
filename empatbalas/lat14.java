@@ -8,11 +8,16 @@ import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 
 public class lat14 {
+
     // ArrayList untuk menyimpan daftar produk
     private static ArrayList<Product> products = new ArrayList<>();
-    
+
     // Model tabel untuk menyimpan data
     private static DefaultTableModel tableModel;
+
+    // Mode update
+    private static boolean isUpdateMode = false;
+    private static int rowBeingEdited = -1;
 
     public static void main(String[] args) {
         // Membuat frame utama
@@ -29,50 +34,79 @@ public class lat14 {
         JTextField nameField = new JTextField(10);
         JTextField priceField = new JTextField(10);
         JButton addButton = new JButton("Tambah");
+        JButton cancelButton = new JButton("Batal");
+        cancelButton.setVisible(false); // Awalnya disembunyikan
 
-        // Event Listener untuk tombol Tambah
+        // Event Listener untuk tombol Tambah / Simpan Perubahan
         addButton.addActionListener(e -> {
-            String name = nameField.getText(); // Mengambil input nama produk
+            String name = nameField.getText();
             try {
-                double price = Double.parseDouble(priceField.getText()); // Konversi harga ke double
-                Product product = new Product(name, price); // Membuat objek produk baru
-                products.add(product); // Menambah produk ke daftar
-                tableModel.addRow(new Object[]{name, price, "Update", "Delete"}); // Menampilkan di tabel
-                nameField.setText(""); // Mengosongkan input nama
-                priceField.setText(""); // Mengosongkan input harga
+                double price = Double.parseDouble(priceField.getText());
+
+                if (isUpdateMode) {
+                    // Simpan perubahan
+                    Product product = products.get(rowBeingEdited);
+                    product.setName(name);
+                    product.setPrice(price);
+
+                    tableModel.setValueAt(name, rowBeingEdited, 0);
+                    tableModel.setValueAt(price, rowBeingEdited, 1);
+
+                    isUpdateMode = false;
+                    rowBeingEdited = -1;
+                    addButton.setText("Tambah");
+                    cancelButton.setVisible(false);
+                } else {
+                    // Tambah produk baru
+                    Product product = new Product(name, price);
+                    products.add(product);
+                    tableModel.addRow(new Object[]{name, price, "Update", "Delete"});
+                }
+
+                nameField.setText("");
+                priceField.setText("");
             } catch (NumberFormatException ex) {
-                // Menampilkan pesan error jika input harga tidak valid
                 JOptionPane.showMessageDialog(frame, "Masukkan harga yang valid!", "Error", JOptionPane.ERROR_MESSAGE);
             }
         });
 
-        // Membuat panel untuk menampung input dan tombol
+        // Event Listener untuk tombol Batal
+        cancelButton.addActionListener(e -> {
+            isUpdateMode = false;
+            rowBeingEdited = -1;
+            nameField.setText("");
+            priceField.setText("");
+            addButton.setText("Tambah");
+            cancelButton.setVisible(false);
+        });
+
+        // Panel untuk input dan tombol
         JPanel panel = new JPanel();
         panel.add(new JLabel("Nama:"));
         panel.add(nameField);
         panel.add(new JLabel("Harga:"));
         panel.add(priceField);
         panel.add(addButton);
+        panel.add(cancelButton); // Tambahkan tombol batal
 
-        // Menambahkan tabel ke frame dengan scroll
+        // Menambahkan tabel ke frame
         frame.add(new JScrollPane(table), BorderLayout.CENTER);
-        frame.add(panel, BorderLayout.SOUTH); // Menempatkan panel di bagian bawah
+        frame.add(panel, BorderLayout.SOUTH);
 
-        // Menggunakan ButtonColumn untuk menangani aksi Update
+        // Menambahkan kolom tombol Update
         TableColumn updateColumn = table.getColumnModel().getColumn(2);
         updateColumn.setCellRenderer(new ButtonRenderer("Update"));
-        updateColumn.setCellEditor(new ButtonEditor(new JCheckBox(), table, "Update"));
+        updateColumn.setCellEditor(new ButtonEditor(new JCheckBox(), table, "Update", nameField, priceField, addButton, cancelButton));
 
-        // Menggunakan ButtonColumn untuk menangani aksi Delete
+        // Menambahkan kolom tombol Delete
         TableColumn deleteColumn = table.getColumnModel().getColumn(3);
         deleteColumn.setCellRenderer(new ButtonRenderer("Delete"));
-        deleteColumn.setCellEditor(new ButtonEditor(new JCheckBox(), table, "Delete"));
+        deleteColumn.setCellEditor(new ButtonEditor(new JCheckBox(), table, "Delete", nameField, priceField, addButton, cancelButton));
 
-        // Menampilkan GUI
         frame.setVisible(true);
     }
 
-    // Renderer untuk menampilkan tombol pada kolom Aksi
+    // Renderer tombol
     static class ButtonRenderer extends JButton implements TableCellRenderer {
         private String action;
 
@@ -82,21 +116,32 @@ public class lat14 {
         }
 
         @Override
-        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+        public Component getTableCellRendererComponent(JTable table, Object value,
+                                                       boolean isSelected, boolean hasFocus, int row, int column) {
             return this;
         }
     }
 
-    // Editor untuk menangani aksi tombol Update dan Delete
+    // Editor untuk tombol Update dan Delete
     static class ButtonEditor extends DefaultCellEditor {
         private String action;
         private int selectedRow;
         private JTable table;
+        private JTextField nameField;
+        private JTextField priceField;
+        private JButton addButton;
+        private JButton cancelButton;
 
-        public ButtonEditor(JCheckBox checkBox, JTable table, String action) {
+        public ButtonEditor(JCheckBox checkBox, JTable table, String action,
+                            JTextField nameField, JTextField priceField,
+                            JButton addButton, JButton cancelButton) {
             super(checkBox);
             this.table = table;
             this.action = action;
+            this.nameField = nameField;
+            this.priceField = priceField;
+            this.addButton = addButton;
+            this.cancelButton = cancelButton;
         }
 
         @Override
@@ -105,36 +150,40 @@ public class lat14 {
         }
 
         @Override
-        public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
+        public Component getTableCellEditorComponent(JTable table, Object value,
+                                                     boolean isSelected, int row, int column) {
             this.selectedRow = row;
             JButton button = new JButton(action);
             button.addActionListener(e -> {
                 if ("Update".equalsIgnoreCase(action)) {
-                    // Memunculkan pop-up untuk mengubah nama produk dan harga
-                    String newName = JOptionPane.showInputDialog("Masukkan nama produk baru:", table.getValueAt(selectedRow, 0));
-                    String newPriceStr = JOptionPane.showInputDialog("Masukkan harga produk baru:", table.getValueAt(selectedRow, 1));
-                    try {
-                        double newPrice = Double.parseDouble(newPriceStr);
-                        products.get(selectedRow).setName(newName);
-                        products.get(selectedRow).setPrice(newPrice);
-                        table.setValueAt(newName, selectedRow, 0);
-                        table.setValueAt(newPrice, selectedRow, 1);
-                    } catch (NumberFormatException ex) {
-                        JOptionPane.showMessageDialog(null, "Harga tidak valid", "Error", JOptionPane.ERROR_MESSAGE);
-                    }
+                    Product product = products.get(selectedRow);
+                    nameField.setText(product.getName());
+                    priceField.setText(String.valueOf(product.getPrice()));
+                    isUpdateMode = true;
+                    rowBeingEdited = selectedRow;
+                    addButton.setText("Simpan Perubahan");
+                    cancelButton.setVisible(true);
                 } else if ("Delete".equalsIgnoreCase(action)) {
-                    // Menghapus baris produk dari daftar dan tabel
                     products.remove(selectedRow);
                     tableModel.removeRow(selectedRow);
+
+                    // Reset state jika sedang update data yang terhapus
+                    if (isUpdateMode && rowBeingEdited == selectedRow) {
+                        isUpdateMode = false;
+                        rowBeingEdited = -1;
+                        nameField.setText("");
+                        priceField.setText("");
+                        addButton.setText("Tambah");
+                        cancelButton.setVisible(false);
+                    }
                 }
             });
             return button;
         }
     }
-
 }
 
-// Kelas untuk merepresentasikan produk
+// Kelas Produk
 class Product {
     private String name;
     private double price;
